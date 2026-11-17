@@ -6,6 +6,7 @@ import {
   createMenu,
   updateMenu,
   deleteMenu,
+  moveMenu,
 } from "../controllers/menuController.js";
 
 import {
@@ -35,6 +36,7 @@ router.get("/sidebar", getSidebarMenus);
 router.get("/menus", requireSuperAdmin, getMenus);
 router.post("/menus", requireSuperAdmin, createMenu);
 router.patch("/menus/:id", requireSuperAdmin, updateMenu);
+router.patch("/menus/:id/move", requireSuperAdmin, moveMenu);
 router.delete("/menus/:id", requireSuperAdmin, deleteMenu);
 
 // Role management: Super Admin only

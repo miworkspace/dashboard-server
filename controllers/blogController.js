@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Blog from "../models/Blogs.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import { getAllowedActions } from "../middleware/permissionMiddleware.js";
 import {
   uploadImage,
   deleteImage,
@@ -69,7 +70,15 @@ export const getBlogs = asyncHandler(async (req, res) => {
     stats.total += count;
   }
 
-  res.json({ success: true, ...result, stats });
+  // Lets the dashboard show only the buttons this user may use
+  const actions = getAllowedActions(req.rbacUser, "blogs");
+  const permissions = {
+    create: actions.includes("create"),
+    edit: actions.includes("edit"),
+    delete: actions.includes("delete"),
+  };
+
+  res.json({ success: true, ...result, stats, permissions });
 });
 
 // =====================================================

@@ -47,6 +47,29 @@ export const requireSuperAdmin = (req, res, next) => {
   next();
 };
 
+const ALL_ACTIONS = ["view", "create", "edit", "delete"];
+
+// Actions a user may perform on a menu/page, e.g. ["view", "edit"].
+// Expects the user loaded by loadRBACUser (accessRole populated).
+export function getAllowedActions(user, menuSlug) {
+  if (!user) return [];
+
+  // Super Admin bypass
+  if (user.role === "admin") return ALL_ACTIONS;
+
+  const permissions = user.accessRole?.permissions || [];
+
+  const allowed = permissions
+    .filter((permission) => {
+      const menu = permission.menu;
+      const slug = typeof menu === "object" ? menu?.slug : null;
+      return slug === menuSlug;
+    })
+    .flatMap((permission) => permission.actions || []);
+
+  return [...new Set(allowed)];
+}
+
 // Check Page Permission
 // action: "edit" or an array like ["create", "edit"] (any one is enough)
 export const requirePermission = (menuSlug, action) => {
@@ -63,23 +86,8 @@ export const requirePermission = (menuSlug, action) => {
         });
       }
 
-      // Super Admin bypass
-      if (user.role === "admin") {
-        return next();
-      }
-
-      const permissions = user.accessRole?.permissions || [];
-
-      const allowed = permissions.some((permission) => {
-        const menu = permission.menu;
-
-        const slug = typeof menu === "object" ? menu.slug : null;
-
-        return (
-          slug === menuSlug &&
-          actions.some((item) => permission.actions?.includes(item))
-        );
-      });
+      const userActions = getAllowedActions(user, menuSlug);
+      const allowed = actions.some((item) => userActions.includes(item));
 
       if (!allowed) {
         return res.status(403).json({

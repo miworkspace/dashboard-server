@@ -74,13 +74,15 @@ export function captureMutationActivity(req, res, next) {
       };
       const module = getModuleName(path);
       const record = path.split("/").filter(Boolean).slice(2).join("/");
+      // Controllers can set res.locals.activity for a readable log entry
+      const custom = res.locals.activity || {};
 
       void writeActivity({
         user: req.user,
         action: actionByMethod[method],
         module,
-        record: record || module,
-        details: `${method} ${path}`,
+        record: custom.record || record || module,
+        details: custom.details || `${method} ${path}`,
         method,
         path,
         status: res.statusCode,

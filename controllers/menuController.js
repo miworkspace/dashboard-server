@@ -20,6 +20,24 @@ function normalizePath(path) {
   return value.replace(/\/+$/, "") || "/";
 }
 
+// Next order value at the end of a parent's children (or root menus).
+async function nextOrderFor(parentId) {
+  const last = await Menu.findOne({ parent: parentId || null })
+    .sort({ order: -1 })
+    .select("order")
+    .lean();
+
+  return last ? (last.order ?? 0) + 1 : 1;
+}
+
+// Siblings in the same order the sidebar shows them.
+function findSiblings(parentId) {
+  return Menu.find({ parent: parentId || null })
+    .sort({ order: 1, name: 1, _id: 1 })
+    .select("_id order")
+    .lean();
+}
+
 // Build hierarchical menus
 function buildTree(menus, parentId = null) {
   return menus
@@ -129,7 +147,7 @@ export const createMenu = async (req, res, next) => {
       icon,
       type = "page",
       parent = null,
-      order = 0,
+      order,
       actions = ["view"],
       isActive = true,
     } = req.body;
@@ -211,6 +229,13 @@ export const createMenu = async (req, res, next) => {
       });
     }
 
+    // Without an explicit order, new menus go to the end of their level.
+    const hasOrder =
+      order !== undefined &&
+      order !== null &&
+      order !== "" &&
+      Number.isFinite(Number(order));
+
     const menu = await Menu.create({
       name: name.trim(),
       slug: normalizedSlug,
@@ -218,7 +243,7 @@ export const createMenu = async (req, res, next) => {
       icon: icon || "circle",
       type,
       parent: parent || null,
-      order: Number(order) || 0,
+      order: hasOrder ? Number(order) : await nextOrderFor(parent || null),
       actions,
       isActive: Boolean(isActive),
       createdBy: req.user?._id || req.rbacUser?._id,
@@ -267,6 +292,7 @@ export const updateMenu = async (req, res, next) => {
       req.body;
 
     const nextType = type ?? menu.type;
+    const previousParent = menu.parent ? menu.parent.toString() : null;
 
     if (!["group", "page"].includes(nextType)) {
       return res.status(400).json({
@@ -337,7 +363,8 @@ export const updateMenu = async (req, res, next) => {
       }
     }
 
-    if (nextType === "group") {
+    // Only a group that is turning into a page must have no children.
+    if (nextType === "page" && menu.type === "group") {
       const children = await Menu.countDocuments({
         parent: id,
       });
@@ -348,7 +375,9 @@ export const updateMenu = async (req, res, next) => {
           message: "A menu with children cannot become a page.",
         });
       }
+    }
 
+    if (nextType === "group") {
       if (path) {
         return res.status(400).json({
           success: false,
@@ -387,7 +416,15 @@ export const updateMenu = async (req, res, next) => {
     menu.type = nextType;
 
     if (icon !== undefined) menu.icon = icon;
-    if (order !== undefined) menu.order = Number(order) || 0;
+
+    const currentParent = menu.parent ? menu.parent.toString() : null;
+
+    if (order !== undefined && order !== null && order !== "") {
+      menu.order = Number(order) || 0;
+    } else if (currentParent !== previousParent) {
+      // Moved under another parent: place it at the end of that level.
+      menu.order = await nextOrderFor(currentParent);
+    }
 
     if (actions !== undefined) {
       if (
@@ -431,6 +468,76 @@ export const updateMenu = async (req, res, next) => {
       });
     }
 
+    next(error);
+  }
+};
+
+// PATCH /api/rbac/menus/:id/move  body: { direction: "up" | "down" }
+// Swaps a menu with its neighbour on the same level.
+export const moveMenu = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { direction } = req.body ?? {};
+
+    if (!validId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid menu ID.",
+      });
+    }
+
+    if (!["up", "down"].includes(direction)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Direction must be "up" or "down".',
+      });
+    }
+
+    const menu = await Menu.findById(id).select("_id name parent").lean();
+
+    if (!menu) {
+      return res.status(404).json({
+        success: false,
+        message: "Menu not found.",
+      });
+    }
+
+    const siblings = await findSiblings(menu.parent);
+    const index = siblings.findIndex((item) => item._id.toString() === id);
+    const target = direction === "up" ? index - 1 : index + 1;
+
+    if (target < 0 || target >= siblings.length) {
+      return res.status(400).json({
+        success: false,
+        message: `Menu is already at the ${direction === "up" ? "top" : "bottom"}.`,
+      });
+    }
+
+    [siblings[index], siblings[target]] = [siblings[target], siblings[index]];
+
+    // Renumber the whole level so duplicate or missing order values are fixed.
+    const updates = siblings
+      .map((item, position) => ({ item, order: position + 1 }))
+      .filter(({ item, order }) => item.order !== order)
+      .map(({ item, order }) => ({
+        updateOne: {
+          filter: { _id: item._id },
+          update: { $set: { order } },
+        },
+      }));
+
+    if (updates.length > 0) await Menu.bulkWrite(updates);
+
+    res.locals.activity = {
+      record: menu.name,
+      details: `Moved ${direction} in menu order`,
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: "Menu order updated.",
+    });
+  } catch (error) {
     next(error);
   }
 };
