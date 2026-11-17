@@ -48,7 +48,10 @@ export const requireSuperAdmin = (req, res, next) => {
 };
 
 // Check Page Permission
+// action: "edit" or an array like ["create", "edit"] (any one is enough)
 export const requirePermission = (menuSlug, action) => {
+  const actions = Array.isArray(action) ? action : [action];
+
   return async (req, res, next) => {
     try {
       const user = req.rbacUser || req.user;
@@ -72,7 +75,10 @@ export const requirePermission = (menuSlug, action) => {
 
         const slug = typeof menu === "object" ? menu.slug : null;
 
-        return slug === menuSlug && permission.actions?.includes(action);
+        return (
+          slug === menuSlug &&
+          actions.some((item) => permission.actions?.includes(item))
+        );
       });
 
       if (!allowed) {

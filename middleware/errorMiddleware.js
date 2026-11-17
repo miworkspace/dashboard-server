@@ -31,6 +31,16 @@ export const errorHandler = (error, req, res, next) => {
   ) {
     status = 400;
     message = "Invalid JSON body";
+  } else if (error.name === "MulterError") {
+    status = 400;
+    message =
+      error.code === "LIMIT_FILE_SIZE"
+        ? "Image must be 5MB or smaller."
+        : error.message;
+  } else if (error.expose && error.status >= 400 && error.status < 500) {
+    // Errors explicitly marked safe to show to the client
+    status = error.status;
+    message = error.message;
   }
 
   res.status(status).json({

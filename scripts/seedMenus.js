@@ -87,6 +87,15 @@ const menus = [
     actions: ["view"],
   },
   {
+    name: "Blogs",
+    slug: "blogs",
+    path: "/dashboard/blogs",
+    icon: "file-text",
+    group: "Content",
+    order: 7,
+    actions: ["view", "create", "edit", "delete"],
+  },
+  {
     name: "User Management",
     slug: "users",
     path: "/dashboard/users",

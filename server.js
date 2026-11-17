@@ -11,6 +11,7 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 import imageRoutes from "./routes/imageRoutes.js";
 import rbacRoutes from "./routes/rbacRoutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
+import blogRoutes from "./routes/blogRoutes.js";
 import { captureMutationActivity } from "./controllers/activityController.js";
 
 const app = express();
@@ -77,6 +78,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/images", imageRoutes);
 app.use("/api/rbac", rbacRoutes);
+app.use("/api/blogs", blogRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
